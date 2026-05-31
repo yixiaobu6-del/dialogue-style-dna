@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>对话风格DNA提取器 - 增强版</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/jieba-js@0.2.0/dist/jieba.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-5xl mx-auto p-4 md:p-6">
+    <div class="text-center mb-6">
+      <h1 class="text-3xl font-bold mb-2">
+        <i class="fa fa-dna text-purple-600"></i> 对话风格DNA提取器 <span class="text-sm font-normal text-gray-400">增强版</span>
+      </h1>
+      <p class="text-gray-500">输入对话文本，分析句式结构、高频词、修辞手法与语气倾向</p>
+    </div>
+
+    <!-- 模式切换 -->
+    <div class="flex justify-center gap-3 mb-4 flex-wrap">
+      <button onclick="setMode('single')" id="modeSingle" class="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium">单文本分析</button>
+      <button onclick="setMode('compare')" id="modeCompare" class="px-4 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-300">对比模式</button>
+      <button onclick="setMode('author')" id="modeAuthor" class="px-4 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-300">作者识别</button>
+      <button onclick="setMode('migrate')" id="modeMigrate" class="px-4 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-300">风格迁移</button>
+    </div>
+
+    <!-- 单文本输入 -->
+    <div id="singleInput" class="bg-white rounded-lg shadow p-4 mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <label for="textInput" class="font-medium text-gray-700">
+          <i class="fa fa-pencil-square-o text-purple-500"></i> 输入对话文本
+        </label>
+        <div class="flex gap-2">
+          <button onclick="loadSample()" class="text-sm px-3 py-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition"><i class="fa fa-file-text-o"></i> 示例文本</button>
+          <button onclick="clearText()" class="text-sm px-3 py-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition"><i class="fa fa-trash-o"></i> 清空</button>
+        </div>
+      </div>
+      <textarea id="textInput" rows="8" class="w-full border rounded-lg px-4 py-3 text-sm leading-relaxed focus:ring-2 focus:ring-purple-300 focus:border-purple-400 outline-none resize-y" placeholder="在此输入对话文本，支持多段文本，每段用空行隔开..."></textarea>
+      <div class="flex items-center justify-between mt-3">
+        <span id="charCount" class="text-xs text-gray-400">字数：0 | 段落：0</span>
+        <button onclick="analyze()" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition font-medium shadow-sm">
+          <i class="fa fa-flask"></i> 提取风格DNA
+        </button>
+      </div>
+    </div>
+
+    <!-- 对比输入 -->
+    <div id="compareInput" class="hidden space-y-4 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-medium text-gray-700 mb-2"><i class="fa fa-user text-blue-500"></i> 文本 A</h3>
+          <textarea id="compareInputA" rows="6" class="w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-300 outline-none resize-y" placeholder="输入文本A..."></textarea>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-medium text-gray-700 mb-2"><i class="fa fa-user text-green-500"></i> 文本 B</h3>
+          <textarea id="compareInputB" rows="6" class="w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-green-300 outline-none resize-y" placeholder="输入文本B..."></textarea>
+        </div>
+      </div>
+      <div class="text-center">
+        <button onclick="analyzeCompare()" class="bg-gradient-to-r from-blue-500 to-green-500 text-white px-8 py-3 rounded-lg hover:from-blue-600 hover:to-green-600 transition font-medium shadow">
+          <i class="fa fa-balance-scale"></i> 开始对比分析
+        </button>
+      </div>
+    </div>
+
+    <!-- 作者识别输入 -->
+    <div id="authorInput" class="hidden space-y-4 mb-4">
+      <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-medium text-gray-700 mb-3"><i class="fa fa-fingerprint text-amber-600"></i> 作者识别</h3>
+        <p class="text-xs text-gray-400 mb-3">输入文本后，系统会与已保存的风格画像数据库进行匹配，找出最相似的可能作者。</p>
+        <textarea id="authorText" rows="6" class="w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-amber-300 outline-none resize-y" placeholder="输入待识别作者的文本..."></textarea>
+        <div class="mt-3">
+          <button onclick="identifyAuthor()" class="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition font-medium shadow-sm">
+            <i class="fa fa-search mr-1"></i> 识别作者
+          </button>
+        </div>
+      </div>
+      <div id="authorResult" class="hidden bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold text-gray-700 mb-3"><i class="fa fa-trophy text-amber-600"></i> 匹配结果</h3>
+        <div id="authorMatchList" class="space-y-2"></div>
+        <div id="authorNoMatch" class="hidden text-center text-gray-400 py-4 text-sm">
+          <i class="fa fa-inbox text-3xl block mb-2"></i>未找到匹配的风格画像。请先保存更多风格画像到数据库中。
+        </div>
+      </div>
+    </div>
+
+    <!-- 风格迁移输入 -->
+    <div id="migrateInput" class="hidden space-y-4 mb-4">
+      <div class="bg-white rounded-lg shadow p-4">
+        <h3 class="font-medium text-gray-700 mb-3"><i class="fa fa-exchange text-green-600"></i> 风格迁移建议</h3>
+        <p class="text-xs text-gray-400 mb-3">分析当前文本风格，并给出改写为指定风格的详细建议。</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">当前文本</label>
+            <textarea id="migrateSource" rows="6" class="w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-green-300 outline-none resize-y" placeholder="输入需要改写的文本..."></textarea>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">目标风格（从已有画像中选择）</label>
+            <select id="migrateTarget" class="w-full border rounded-lg p-2 text-sm mb-2">
+              <option value="">--- 选择目标风格 ---</option>
+            </select>
+            <div class="text-xs text-gray-400 mb-2">或选择预设风格模板：</div>
+            <div class="flex flex-wrap gap-2 mb-2">
+              <button onclick="setPresetStyle('口语化')" class="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">口语化</button>
+              <button onclick="setPresetStyle('书面化')" class="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">书面化</button>
+              <button onclick="setPresetStyle('专业严谨')" class="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">专业严谨</button>
+              <button onclick="setPresetStyle('情感充沛')" class="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">情感充沛</button>
+              <button onclick="setPresetStyle('简洁精炼')" class="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">简洁精炼</button>
+            </div>
+            <button onclick="analyzeMigration()" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition font-medium shadow-sm w-full">
+              <i class="fa fa-exchange mr-1"></i> 生成迁移建议
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="migrateResult" class="hidden bg-white rounded-lg shadow p-4">
+        <h3 class="font-bold text-gray-700 mb-3"><i class="fa fa-pencil text-green-600"></i> 风格迁移建议</h3>
+        <div id="migrateContent" class="space-y-3"></div>
+      </div>
+    </div>
+
+    <!-- 分析结果区域 -->
+    <div id="resultArea" class="hidden space-y-4">
+      <div class="bg-white rounded-lg shadow p-4 md:p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-gray-800">
+            <i class="fa fa-id-card text-purple-600"></i> 风格画像
+          </h2>
+          <div class="flex gap-2">
+            <button onclick="saveProfile()" class="text-sm px-3 py-1.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition"><i class="fa fa-save"></i> 保存画像</button>
+            <button onclick="exportSummary()" class="text-sm px-3 py-1.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition"><i class="fa fa-download"></i> 导出摘要</button>
+          </div>
+        </div>
+        <div id="profileContent" class="space-y-4"></div>
+        <div id="wordcloudArea" class="mt-4 pt-4 border-t">
+          <h3 class="font-bold text-gray-700 mb-2"><i class="fa fa-cloud text-purple-500"></i> 词云可视化</h3>
+          <canvas id="wordcloudCanvas" height="200" class="w-full border rounded bg-gray-50"></canvas>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-bold text-gray-700 mb-3"><i class="fa fa-paragraph text-blue-500"></i> 句式结构分析</h3>
+          <div id="sentenceAnalysis" class="space-y-2 text-sm"></div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-bold text-gray-700 mb-3"><i class="fa fa-tags text-green-500"></i> 高频词统计</h3>
+          <div id="wordFreq" class="space-y-2 text-sm"></div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-bold text-gray-700 mb-3"><i class="fa fa-magic text-orange-500"></i> 修辞手法识别</h3>
+          <div id="rhetoric" class="space-y-2 text-sm"></div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <h3 class="font-bold text-gray-700 mb-3"><i class="fa fa-microphone text-red-500"></i> 语气分析</h3>
+          <div id="toneAnalysis" class="space-y-2 text-sm"></div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-gray-700"><i class="fa fa-archive text-purple-500"></i> 已保存的风格画像 <span id="profileCount" class="text-sm font-normal text-gray-400">(0)</span></h3>
+          <button onclick="clearSaved()" class="text-sm px-3 py-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200 transition"><i class="fa fa-trash"></i> 清空记录</button>
+        </div>
+        <div id="savedList" class="space-y-2 max-h-60 overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <!-- 对比结果 -->
+    <div id="compareResult" class="hidden space-y-4">
+      <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-bold mb-4"><i class="fa fa-balance-scale text-purple-600"></i> 对比分析结果</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="border border-blue-200 rounded-lg p-4 bg-blue-50">
+            <h3 class="font-bold text-blue-700 mb-2"><i class="fa fa-user"></i> 文本 A 风格画像</h3>
+            <div id="compareResultA" class="text-sm space-y-2"></div>
+          </div>
+          <div class="border border-green-200 rounded-lg p-4 bg-green-50">
+            <h3 class="font-bold text-green-700 mb-2"><i class="fa fa-user"></i> 文本 B 风格画像</h3>
+            <div id="compareResultB" class="text-sm space-y-2"></div>
+          </div>
+        </div>
+        <div class="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+          <h3 class="font-bold text-yellow-700 mb-2"><i class="fa fa-exchange"></i> 核心差异</h3>
+          <div id="compareDiff" class="text-sm space-y-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 shadow-2xl text-center">
+        <i class="fa fa-spinner fa-spin fa-3x text-purple-600 mb-4"></i>
+        <p class="text-gray-600">正在提取风格DNA...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SAMPLE_TEXT = `说实话，我真的不懂现在这些年轻人到底在想什么。
+
+你知道吗？我昨天在地铁上看到一个女孩，全程都在刷短视频，笑得前仰后合。我就想啊，这些东西真的有这么好笑吗？不是说我不理解快乐，但那种碎片化的东西，看完了你还能记住什么？可能连她自己都不记得三分钟前看了什么吧。
+
+我一直觉得，人生是需要深度的。你可以喜欢轻松的东西，但不能只有轻松。就像吃饭，你可以吃零食，但不能光吃零食当正餐。对不对？
+
+不过话说回来，我年轻的时候好像也被长辈这么说过。那时候我爱看武侠小说，我爸就说我不务正业。现在想想，可能每个时代都有每个时代的"不务正业"吧。
+
+但我还是觉得不一样的。以前看小说，再怎么说你也是在读一个完整的故事，有情节、有人物、有主题。现在刷短视频，十五秒一个，什么都是碎片。这能一样吗？
+
+哎，算了，可能我真的老了。但我还是想说，世界变化太快了，快到让人有点害怕。不是害怕变化本身，而是害怕我们在变化中丢掉了那些真正重要的东西。`;
+
+    const COMMON_WORDS = new Set([
+      '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一',
+      '一个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着',
+      '没有', '看', '好', '自己', '这', '他', '她', '它', '们', '那', '什么',
+      '吗', '啊', '吧', '呢', '呀', '哦', '嗯', '哈', '嘛', '啦', '呵',
+      '因为', '所以', '而且', '然后', '可以', '还是',
+      '这个', '那个', '这些', '那些', '这样', '那样', '怎么', '为什么',
+      '已经', '一直', '真是', '真的', '就是', '不是', '可能',
+      '应该', '觉得', '知道', '看到', '听到', '想到', '变成',
+      '起来', '出来', '回来', '过来', '进去', '出去', '上去', '下去',
+      '之', '与', '及', '或', '并', '而', '且', '被', '把', '让', '给',
+      '从', '对', '向', '于', '以', '为', '比', '同', '跟', '和',
+      '每', '各', '某', '另', '再', '又', '还', '更', '最', '越', '很', '极',
+      '如果', '虽然'
+    ]);
+
+    let currentMode = 'single';
+    let currentResult = null;
+    let text = '';
+
+    // ====== jieba 分词（若可用） ======
+    function jiebaCut(text) {
+      if (typeof jieba !== 'undefined' && jieba && jieba.cut) {
+        try { return jieba.cut(text); } catch(e) { /* fallback */ }
+      }
+      return null;
+    }
+
+    function segmentWords(text) {
+      // 优先使用 jieba
+      const jiebaResult = jiebaCut(text);
+      if (jiebaResult && jiebaResult.length > 0) {
+        return jiebaResult.filter(w => w.length >= 2 && /[\u4e00-\u9fff]/.test(w));
+      }
+      // fallback: 双字分词
+      const words = [];
+      let i = 0;
+      while (i < text.length) {
+        if (i + 1 < text.length) {
+          const twoChar = text.substr(i, 2);
+          if (!COMMON_WORDS.has(twoChar) && /[\u4e00-\u9fff]/.test(twoChar[0]) && /[\u4e00-\u9fff]/.test(twoChar[1])) {
+            words.push(twoChar);
+            i += 2;
+            continue;
+          }
+        }
+        if (/[\u4e00-\u9fff]/.test(text[i])) { words.push(text[i]); }
+        i++;
+      }
+      return words;
+    }
+
+    // ====== 风格画像预设定义 ======
+    const STYLE_PRESETS = {
+      '口语化': { colloquial: { score: 80, level: '高' }, sentLengthDist: { short: { pct: 60 }, medium: { pct: 30 }, long: { pct: 10 } }, tags: ['口语化', '高频提问', '情感充沛'], lexicalRichness: '35', firstPersonRatio: 60, secondPersonRatio: 25, punctDensity: { exclamation: { density: 2.5 }, question: { density: 2.0 } } },
+      '书面化': { colloquial: { score: 20, level: '低' }, sentLengthDist: { short: { pct: 20 }, medium: { pct: 50 }, long: { pct: 30 } }, tags: ['书面化', '长句思辨型', '词汇丰富'], lexicalRichness: '65', firstPersonRatio: 30, secondPersonRatio: 10, punctDensity: { exclamation: { density: 0.5 }, question: { density: 0.8 } } },
+      '专业严谨': { colloquial: { score: 15, level: '低' }, sentLengthDist: { short: { pct: 15 }, medium: { pct: 40 }, long: { pct: 45 } }, tags: ['书面化', '长句思辨型', '词汇丰富', '句号密集型'], lexicalRichness: '72', firstPersonRatio: 20, secondPersonRatio: 5, punctDensity: { exclamation: { density: 0.2 }, question: { density: 0.5 } } },
+      '情感充沛': { colloquial: { score: 65, level: '中' }, sentLengthDist: { short: { pct: 50 }, medium: { pct: 35 }, long: { pct: 15 } }, tags: ['口语化', '情感充沛', '善用反问', '自我中心表达'], lexicalRichness: '45', firstPersonRatio: 70, secondPersonRatio: 20, punctDensity: { exclamation: { density: 3.5 }, question: { density: 2.5 } } },
+      '简洁精炼': { colloquial: { score: 40, level: '中' }, sentLengthDist: { short: { pct: 70 }, medium: { pct: 25 }, long: { pct: 5 } }, tags: ['碎片化表达', '词汇集中', '句号密集型'], lexicalRichness: '40', firstPersonRatio: 40, secondPersonRatio: 15, punctDensity: { exclamation: { density: 1.0 }, question: { density: 1.2 } } }
+    };
+
+    function setMode(mode) {
+      currentMode = mode;
+      ['single', 'compare', 'author', 'migrate'].forEach(m => {
+        document.getElementById(m + 'Input').classList.toggle('hidden', m !== mode);
+      });
+      ['mode' + mode.charAt(0).toUpperCase() + mode.slice(1)].forEach(id => {});
+      const btnMap = { single: 'modeSingle', compare: 'modeCompare', author: 'modeAuthor', migrate: 'modeMigrate' };
+      Object.entries(btnMap).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        el.className = key === mode ? 'px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium' : 'px-4 py-2 bg-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-300';
+      });
+      document.getElementById('resultArea').classList.add('hidden');
+      document.getElementById('compareResult').classList.add('hidden');
+      document.getElementById('authorResult').classList.add('hidden');
+      document.getElementById('migrateResult').classList.add('hidden');
+      if (mode === 'migrate') populateMigrateTargets();
+    }
+
+    function analyzeText(text) {
+      if (!text.trim()) return null;
+      const lines = text.split('\n').filter(l => l.trim());
+      const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+      const sentences = [];
+      const sentenceRegex = /[^。！？\n]+[。！？]?/g;
+      let match;
+      while ((match = sentenceRegex.exec(text)) !== null) { const s = match[0].trim(); if (s) sentences.push(s); }
+
+      const sentenceLengths = sentences.map(s => s.length);
+      const avgLength = sentenceLengths.length > 0 ? (sentenceLengths.reduce((a, b) => a + b, 0) / sentenceLengths.length).toFixed(1) : 0;
+      const declarative = sentences.filter(s => /[。]$/.test(s) || /[^？！]$/.test(s[s.length-1])).length;
+      const questionMarks = sentences.filter(s => s.includes('？')).length;
+      const exclamatory = sentences.filter(s => /[！]$/.test(s)).length;
+      const rhetoricalSentences = sentences.filter(s => /难道|岂不|不是吗|怎么可能|哪有|何尝|怎能|何必/.test(s)).length;
+
+      const sentenceTypes = {
+        total: sentences.length, avgLength: parseFloat(avgLength),
+        declarative: { count: declarative, pct: ((declarative / sentences.length) * 100).toFixed(1) },
+        interrogative: { count: questionMarks, pct: ((questionMarks / sentences.length) * 100).toFixed(1) },
+        exclamatory: { count: exclamatory, pct: ((exclamatory / sentences.length) * 100).toFixed(1) },
+        rhetorical: rhetoricalSentences
+      };
+
+      const words = segmentWords(text);
+      const wordFreq = {};
+      words.forEach(w => { if (w.length >= 2 && /[\u4e00-\u9fff]/.test(w)) wordFreq[w] = (wordFreq[w] || 0) + 1; });
+      const sortedWords = Object.entries(wordFreq).filter(([_, c]) => c >= 2).sort((a, b) => b[1] - a[1]).slice(0, 20);
+
+      // 修辞手法
+      const rhetoricResult = { metaphor: 0, parallelism: 0, rhetorical: 0, others: [] };
+      const metaphorPatterns = [/像[\s\S]{1,10}一样/, /如同[\s\S]{1,10}一般/, /仿佛[\s\S]{1,10}似的/, /好比/, /宛如/, /恰似/, /犹如/, /就像是/, /就好像/];
+      metaphorPatterns.forEach(p => { const m = text.match(p); if (m) rhetoricResult.metaphor += m.length; });
+      for (let i = 0; i < paragraphs.length - 1; i++) {
+        const prefix1 = paragraphs[i].substring(0, 4);
+        const prefix2 = paragraphs[i + 1].substring(0, 4);
+        if (prefix1 === prefix2 && prefix1.length >= 2) rhetoricResult.parallelism++;
+      }
+      const rhetoricalMatches = text.match(/难道|岂不|不是吗|怎么可能|哪有|何尝|怎能|何必|不是吗/g);
+      rhetoricResult.rhetorical = rhetoricalMatches ? rhetoricalMatches.length : 0;
+      const askSelf = text.match(/自问|扪心自问/g);
+      if (askSelf) rhetoricResult.others.push({ name: '设问', count: askSelf.length });
+      const contrast = text.match(/不像|不同于|截然不同|恰恰相反|反之|而是/g);
+      if (contrast) rhetoricResult.others.push({ name: '对比', count: contrast.length });
+      const repetition = text.match(/真的|真正|重要/g);
+      if (repetition) rhetoricResult.others.push({ name: '强调重复', count: repetition.length });
+      const quote = text.match(/俗话说|古人云|有句话说|就像.*说的/g);
+      if (quote) rhetoricResult.others.push({ name: '引用', count: quote.length });
+
+      // 语气分析
+      const colloquialMarkers = ['嘛', '啦', '哈', '哎', '嗯', '哦', '呵', '切', '嘞', '说实话', '你知道吗', '就是说', '反正', '我觉得', '好吧', '哎呀', '算了', '话说回来', '那个', '这个'];
+      let colloquialScore = 0;
+      colloquialMarkers.forEach(m => { const re = new RegExp(m, 'g'); const matches = text.match(re); if (matches) colloquialScore += matches.length; });
+      const positiveWords = ['喜欢', '快乐', '好', '不错', '棒', '精彩', '感动', '温暖', '幸福', '美好', '赞', '厉害', '优秀', '开心', '享受', '深度', '完整', '真正'];
+      const negativeWords = ['害怕', '难过', '糟糕', '烦', '讨厌', '无聊', '焦虑', '压力', '痛苦', '累', '受不了', '碎片', '太快', '丢掉', '不懂'];
+      let posCount = 0, negCount = 0;
+      positiveWords.forEach(w => { const re = new RegExp(w, 'g'); const m = text.match(re); if (m) posCount += m.length; });
+      negativeWords.forEach(w => { const re = new RegExp(w, 'g'); const m = text.match(re); if (m) negCount += m.length; });
+      const totalSentiment = posCount + negCount;
+      const sentimentScore = totalSentiment > 0 ? ((posCount - negCount) / totalSentiment * 100).toFixed(0) : 0;
+      const exclamationCount = (text.match(/！/g) || []).length;
+      const questionCount = (text.match(/？/g) || []).length;
+      const ellipsisCount = (text.match(/\.\.\.|…/g) || []).length;
+      const emotionIntensity = Math.min(100, Math.round((exclamationCount * 3 + questionCount * 2 + ellipsisCount) / sentences.length * 50));
+      const firstPerson = (text.match(/我/g) || []).length;
+      const secondPerson = (text.match(/你/g) || []).length;
+
+      const tone = {
+        colloquial: { score: Math.min(100, Math.round(colloquialScore / sentences.length * 50)), level: '', markers: colloquialScore },
+        sentiment: { score: parseInt(sentimentScore), positive: posCount, negative: negCount, tendency: '' },
+        emotionIntensity: emotionIntensity, firstPerson: firstPerson, secondPerson: secondPerson
+      };
+      if (tone.colloquial.score >= 60) tone.colloquial.level = '高';
+      else if (tone.colloquial.score >= 30) tone.colloquial.level = '中';
+      else tone.colloquial.level = '低';
+      if (tone.sentiment.score > 20) tone.sentiment.tendency = '积极';
+      else if (tone.sentiment.score < -20) tone.sentiment.tendency = '消极';
+      else tone.sentiment.tendency = '中立';
+
+      const tags = [];
+      if (sentenceTypes.interrogative.pct > 20) tags.push('爱提问');
+      if (tone.colloquial.score > 50) tags.push('口语化');
+      if (tone.colloquial.score <= 30) tags.push('书面化');
+      if (tone.sentiment.tendency === '积极') tags.push('积极乐观');
+      if (tone.sentiment.tendency === '消极') tags.push('略带忧虑');
+      if (sentenceTypes.rhetorical > 0) tags.push('善用反问');
+      if (rhetoricResult.metaphor > 0) tags.push('善用比喻');
+      if (rhetoricResult.parallelism > 0) tags.push('结构排比');
+
+      // 细粒度特征
+      const totalChars = text.replace(/\s/g, '').length || 1;
+      const periodCount = (text.match(/。/g) || []).length;
+      const commaCount = (text.match(/，/g) || []).length;
+      const exclCount = (text.match(/！/g) || []).length;
+      const quesCount = (text.match(/？/g) || []).length;
+      const colonCount = (text.match(/：/g) || []).length;
+      const quoteCount = (text.match(/["""「『]/g) || []).length;
+      const punctDensity = {
+        period: { count: periodCount, density: ((periodCount / totalChars) * 100).toFixed(2) },
+        comma: { count: commaCount, density: ((commaCount / totalChars) * 100).toFixed(2) },
+        exclamation: { count: exclCount, density: ((exclCount / totalChars) * 100).toFixed(2) },
+        question: { count: quesCount, density: ((quesCount / totalChars) * 100).toFixed(2) },
+        colon: { count: colonCount, density: ((colonCount / totalChars) * 100).toFixed(2) },
+        quote: { count: quoteCount, density: ((quoteCount / totalChars) * 100).toFixed(2) },
+      };
+      const shortSentences2 = sentences.filter(s => s.length <= 10).length;
+      const mediumSentences2 = sentences.filter(s => s.length > 10 && s.length <= 25).length;
+      const longSentences2 = sentences.filter(s => s.length > 25).length;
+      const sentLengthDist = {
+        short: { count: shortSentences2, pct: ((shortSentences2 / sentences.length) * 100).toFixed(1) },
+        medium: { count: mediumSentences2, pct: ((mediumSentences2 / sentences.length) * 100).toFixed(1) },
+        long: { count: longSentences2, pct: ((longSentences2 / sentences.length) * 100).toFixed(1) },
+      };
+      const uniqueWords = new Set(words).size;
+      const totalWordCount = words.length || 1;
+      const lexicalRichness = (uniqueWords / totalWordCount * 100).toFixed(1);
+      const firstPersonTotal = (text.match(/我/g) || []).length + (text.match(/我们/g) || []).length;
+      const secondPersonTotal = (text.match(/你/g) || []).length + (text.match(/你们/g) || []).length;
+      const thirdPersonTotal = (text.match(/他/g) || []).length + (text.match(/她/g) || []).length + (text.match(/他们/g) || []).length + (text.match(/她们/g) || []).length;
+      const pTotal = firstPersonTotal + secondPersonTotal + thirdPersonTotal;
+      const personRatio = {
+        first: firstPersonTotal, second: secondPersonTotal, third: thirdPersonTotal, total: pTotal,
+        firstPct: pTotal > 0 ? ((firstPersonTotal / pTotal) * 100).toFixed(1) : '0',
+        secondPct: pTotal > 0 ? ((secondPersonTotal / pTotal) * 100).toFixed(1) : '0',
+        thirdPct: pTotal > 0 ? ((thirdPersonTotal / pTotal) * 100).toFixed(1) : '0',
+      };
+
+      if (parseFloat(punctDensity.question.density) > 1) tags.push('高频提问');
+      if (parseFloat(punctDensity.exclamation.density) > 1.5) tags.push('情感充沛');
+      if (parseFloat(lexicalRichness) > 60) tags.push('词汇丰富');
+      if (parseFloat(lexicalRichness) < 35) tags.push('词汇集中');
+      if (personRatio.first > 0 && personRatio.first > personRatio.second * 2) tags.push('自我中心表达');
+      if (personRatio.second > personRatio.first * 1.5) tags.push('高互动导向');
+      if (parseFloat(sentLengthDist.short.pct) > 60) tags.push('碎片化表达');
+      if (parseFloat(sentLengthDist.long.pct) > 30) tags.push('长句思辨型');
+      if (parseFloat(punctDensity.period.density) > parseFloat(punctDensity.comma.density)) tags.push('句号密集型');
+      else tags.push('逗号密集型');
+
+      return {
+        sentences: sentenceTypes, wordFreq: sortedWords, rhetoric: rhetoricResult,
+        tone: tone, tags: tags, wordFreqAll: wordFreq,
+        metadata: { charCount: totalChars, paragraphCount: paragraphs.length, sentenceCount: sentences.length },
+        punctDensity: punctDensity, sentLengthDist: sentLengthDist,
+        lexicalRichness: lexicalRichness, personRatio: personRatio,
+        words: words
+      };
+    }
+
+    // ====== 词云绘制 ======
+    function drawWordcloud(result) {
+      const canvas = document.getElementById('wordcloudCanvas');
+      const ctx = canvas.getContext('2d');
+      const W = canvas.offsetWidth || 600;
+      const H = 200;
+      canvas.width = W * 2;
+      canvas.height = H * 2;
+      ctx.scale(2, 2);
+      ctx.clearRect(0, 0, W, H);
+      const words = Object.entries(result.wordFreqAll || {}).filter(([w, c]) => c >= 2 && w.length >= 2).sort((a, b) => b[1] - a[1]).slice(0, 30);
+      if (words.length === 0) {
+        ctx.fillStyle = '#999'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('词频数据不足，无法生成词云', W/2, H/2); return;
+      }
+      const maxCount = words[0][1];
+      const colors = ['#7c3aed','#ec4899','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#f97316'];
+      const cx = W / 2, cy = H / 2;
+      let placed = [];
+      words.forEach(([word, count], idx) => {
+        const ratio = count / maxCount;
+        const fontSize = 12 + ratio * 28;
+        const color = colors[idx % colors.length];
+        let angle = 0, radius = 0, x, y, found = false;
+        for (let step = 0; step < 500; step++) {
+          angle = step * 0.3; radius = step * 0.4;
+          x = cx + Math.cos(angle) * radius; y = cy + Math.sin(angle) * radius;
+          if (x < 10 || x > W - 10 || y < 10 || y > H - 10) continue;
+          const tw = ctx.measureText(word).width;
+          let overlap = false;
+          for (const p of placed) {
+            if (Math.abs(x - p.x) < (tw/2 + p.tw/2 + 5) && Math.abs(y - p.y) < (fontSize/2 + p.fs/2 + 3)) { overlap = true; break; }
+          }
+          if (!overlap) { found = true; break; }
+        }
+        if (!found) return;
+        placed.push({ x, y, tw: ctx.measureText(word).width, fs: fontSize });
+        ctx.font = 'bold ' + fontSize + 'px sans-serif';
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(word, x, y);
+      });
+    }
+
+    function renderAnalysis(result) {
+      const tagsHtml = result.tags.map(t => '<span class="inline-block px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">' + t + '</span>').join('');
+      const profileHtml = '<div class="flex flex-wrap items-start gap-4 mb-4">' +
+        '<div class="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-5 flex-1 min-w-[200px]"><div class="text-3xl font-bold text-purple-700 mb-1">' + result.metadata.sentenceCount + '</div><div class="text-xs text-gray-500">总句子数</div></div>' +
+        '<div class="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-5 flex-1 min-w-[200px]"><div class="text-3xl font-bold text-blue-700 mb-1">' + result.sentences.avgLength + '</div><div class="text-xs text-gray-500">平均句长（字）</div></div>' +
+        '<div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-5 flex-1 min-w-[200px]"><div class="text-3xl font-bold text-green-700 mb-1">' + result.metadata.charCount + '</div><div class="text-xs text-gray-500">总字数</div></div>' +
+        '<div class="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-5 flex-1 min-w-[200px]"><div class="text-3xl font-bold text-orange-700 mb-1">' + result.tone.colloquial.score + '</div><div class="text-xs text-gray-500">口语化指数</div></div></div>' +
+        '<div class="flex flex-wrap gap-2">' + tagsHtml + '</div>';
+      document.getElementById('profileContent').innerHTML = profileHtml;
+      drawWordcloud(result);
+
+      const s = result.sentences;
+      document.getElementById('sentenceAnalysis').innerHTML =
+        '<div class="flex items-center justify-between"><span class="text-gray-600">总句数</span><span class="font-medium">' + s.total + ' 句</span></div>' +
+        '<div class="flex items-center justify-between"><span class="text-gray-600">平均句长</span><span class="font-medium">' + s.avgLength + ' 字</span></div>' +
+        (result.sentLengthDist ? '<div class="pt-2 border-t"><div class="text-xs text-gray-500 mb-1">句式长度分布</div><div class="flex h-3 rounded overflow-hidden"><div class="bg-emerald-400" style="width:' + result.sentLengthDist.short.pct + '%"></div><div class="bg-amber-400" style="width:' + result.sentLengthDist.medium.pct + '%"></div><div class="bg-rose-400" style="width:' + result.sentLengthDist.long.pct + '%"></div></div><div class="flex text-xs text-gray-500 mt-1"><span class="flex-1">短≤10字 ' + result.sentLengthDist.short.count + '</span><span class="flex-1 text-center">中11-25字 ' + result.sentLengthDist.medium.count + '</span><span class="flex-1 text-right">长≥26字 ' + result.sentLengthDist.long.count + '</span></div></div>' : '') +
+        '<div class="pt-2 border-t"><div class="text-xs text-gray-500 mb-1">句子类型</div><div class="space-y-1"><div class="flex items-center gap-2"><span class="w-16 text-xs text-gray-500">陈述</span><div class="flex-1 bg-gray-100 rounded h-3"><div class="bg-blue-500 rounded h-3" style="width:' + s.declarative.pct + '%"></div></div><span class="text-xs text-gray-600 w-12 text-right">' + s.declarative.pct + '%</span></div><div class="flex items-center gap-2"><span class="w-16 text-xs text-gray-500">疑问</span><div class="flex-1 bg-gray-100 rounded h-3"><div class="bg-green-500 rounded h-3" style="width:' + s.interrogative.pct + '%"></div></div><span class="text-xs text-gray-600 w-12 text-right">' + s.interrogative.pct + '%</span></div><div class="flex items-center gap-2"><span class="w-16 text-xs text-gray-500">感叹</span><div class="flex-1 bg-gray-100 rounded h-3"><div class="bg-orange-500 rounded h-3" style="width:' + s.exclamatory.pct + '%"></div></div><span class="text-xs text-gray-600 w-12 text-right">' + s.exclamatory.pct + '%</span></div></div></div>' +
+        (s.rhetorical > 0 ? '<div class="pt-2 border-t text-gray-600">反问句：<span class="font-medium text-purple-600">' + s.rhetorical + '</span> 句</div>' : '');
+
+      const words = result.wordFreq;
+      let wordHtml = '';
+      if (words.length > 0) {
+        const maxCount = words[0][1];
+        wordHtml += '<div class="text-xs text-gray-500 mb-2">高频词</div>';
+        wordHtml += words.map(([w, c], i) => { const bw = (c / maxCount * 100).toFixed(0); return '<div class="flex items-center gap-2"><span class="w-1.5 text-xs text-gray-400">' + (i+1) + '</span><span class="w-14 text-sm">' + w + '</span><div class="flex-1 bg-gray-100 rounded h-4"><div class="bg-green-400 rounded h-4" style="width:' + bw + '%"></div></div><span class="text-xs text-gray-500 w-8 text-right">' + c + '</span></div>'; }).join('');
+      } else { wordHtml += '<div class="text-gray-400 text-xs">未检测到重复高频词</div>'; }
+      if (result.lexicalRichness) {
+        wordHtml += '<div class="pt-2 mt-2 border-t"><div class="flex items-center justify-between"><span class="text-gray-600 text-xs">词汇丰富度</span><span class="font-medium text-sm">' + result.lexicalRichness + '%</span></div><div class="bg-gray-100 rounded h-2 mt-1"><div class="bg-indigo-400 rounded h-2" style="width:' + Math.min(100, parseFloat(result.lexicalRichness)) + '%"></div></div></div>';
+      }
+      document.getElementById('wordFreq').innerHTML = wordHtml;
+
+      const r = result.rhetoric;
+      const rhetoricHtml = [];
+      if (r.metaphor > 0) rhetoricHtml.push('<div class="flex items-center gap-2 p-2 bg-orange-50 rounded"><i class="fa fa-star text-orange-500"></i><span>比喻 <span class="font-medium text-orange-600">' + r.metaphor + '</span> 处</span></div>');
+      if (r.parallelism > 0) rhetoricHtml.push('<div class="flex items-center gap-2 p-2 bg-blue-50 rounded"><i class="fa fa-bars text-blue-500"></i><span>排比 <span class="font-medium text-blue-600">' + r.parallelism + '</span> 组</span></div>');
+      if (r.rhetorical > 0) rhetoricHtml.push('<div class="flex items-center gap-2 p-2 bg-purple-50 rounded"><i class="fa fa-question-circle text-purple-500"></i><span>反问 <span class="font-medium text-purple-600">' + r.rhetorical + '</span> 处</span></div>');
+      r.others.forEach(o => { rhetoricHtml.push('<div class="flex items-center gap-2 p-2 bg-gray-50 rounded"><i class="fa fa-asterisk text-gray-500"></i><span>' + o.name + ' <span class="font-medium">' + o.count + '</span> 处</span></div>'); });
+      if (rhetoricHtml.length === 0) rhetoricHtml.push('<div class="text-gray-400 text-xs">暂未识别出明显修辞手法</div>');
+      document.getElementById('rhetoric').innerHTML = rhetoricHtml.join('');
+
+      const t = result.tone;
+      const pd = result.punctDensity;
+      const pr = result.personRatio;
+      const sentColor = t.sentiment.tendency === '积极' ? 'text-green-600' : t.sentiment.tendency === '消极' ? 'text-red-600' : 'text-gray-600';
+      const emotionLabel = t.emotionIntensity > 60 ? '强烈' : t.emotionIntensity > 30 ? '中等' : '平和';
+      document.getElementById('toneAnalysis').innerHTML =
+        '<div class="space-y-3"><div><div class="flex items-center justify-between mb-1"><span class="text-gray-600 text-xs">口语化程度</span><span class="text-sm font-medium">' + t.colloquial.level + '（' + t.colloquial.score + '）</span></div><div class="bg-gray-100 rounded h-3"><div class="bg-red-400 rounded h-3" style="width:' + t.colloquial.score + '%"></div></div></div>' +
+        '<div class="flex items-center justify-between"><span class="text-gray-600 text-xs">情感倾向</span><span class="font-medium ' + sentColor + '">' + t.sentiment.tendency + '（' + (t.sentiment.score > 0 ? '+' : '') + t.sentiment.score + '）</span></div>' +
+        '<div class="flex items-center justify-between"><span class="text-gray-600 text-xs">情绪强度</span><span class="font-medium">' + emotionLabel + '（' + t.emotionIntensity + '）</span></div>' +
+        (pd ? '<div class="pt-2 border-t"><div class="text-xs text-gray-500 mb-1">标点密度（每百字）</div><div class="grid grid-cols-2 gap-1 text-xs"><span>句号 ' + pd.period.density + '%</span><span>逗号 ' + pd.comma.density + '%</span><span>感叹号 ' + pd.exclamation.density + '%</span><span>问号 ' + pd.question.density + '%</span></div></div>' : '') +
+        (pr ? '<div class="pt-2 border-t"><div class="text-xs text-gray-500 mb-1">人称代词分布</div><div class="flex h-3 rounded overflow-hidden"><div class="bg-blue-400" style="width:' + pr.firstPct + '%"></div><div class="bg-green-400" style="width:' + pr.secondPct + '%"></div><div class="bg-gray-400" style="width:' + pr.thirdPct + '%"></div></div><div class="flex text-xs text-gray-500 mt-1"><span class="flex-1">第一人称 ' + pr.first + '次 (' + pr.firstPct + '%)</span><span class="flex-1 text-center">第二人称 ' + pr.second + '次 (' + pr.secondPct + '%)</span><span class="flex-1 text-right">第三人称 ' + pr.third + '次 (' + pr.thirdPct + '%)</span></div></div>' : '') +
+        '<div class="pt-2 border-t flex items-center justify-between"><span class="text-gray-600 text-xs">"我" 出现</span><span class="font-medium">' + t.firstPerson + ' 次</span></div>' +
+        '<div class="flex items-center justify-between"><span class="text-gray-600 text-xs">"你" 出现</span><span class="font-medium">' + t.secondPerson + ' 次</span></div></div>';
+    }
+
+    function getText() { return document.getElementById('textInput').value; }
+
+    function analyze() {
+      text = getText();
+      if (!text.trim()) { alert('请先输入对话文本'); return; }
+      document.getElementById('loading').classList.remove('hidden');
+      setTimeout(() => {
+        const result = analyzeText(text);
+        if (!result) { document.getElementById('loading').classList.add('hidden'); alert('文本分析失败'); return; }
+        currentResult = result;
+        renderAnalysis(result);
+        document.getElementById('resultArea').classList.remove('hidden');
+        document.getElementById('compareResult').classList.add('hidden');
+        document.getElementById('loading').classList.add('hidden');
+        renderSavedList();
+      }, 500);
+    }
+
+    // ====== 对比分析 ======
+    function analyzeCompare() {
+      const textA = document.getElementById('compareInputA').value.trim();
+      const textB = document.getElementById('compareInputB').value.trim();
+      if (!textA || !textB) { alert('请在两个文本框内都输入文本'); return; }
+      const resultA = analyzeText(textA);
+      const resultB = analyzeText(textB);
+      if (!resultA || !resultB) { alert('文本分析失败'); return; }
+      document.getElementById('compareResultA').innerHTML =
+        '<div>总字数: ' + resultA.metadata.charCount + ' | 句子: ' + resultA.metadata.sentenceCount + '</div>' +
+        '<div>平均句长: ' + resultA.sentences.avgLength + '字</div>' +
+        '<div>口语化指数: ' + resultA.tone.colloquial.score + ' (' + resultA.tone.colloquial.level + ')</div>' +
+        '<div>情感倾向: ' + resultA.tone.sentiment.tendency + '</div>' +
+        '<div>词汇丰富度: ' + (resultA.lexicalRichness || 'N/A') + '%</div>' +
+        '<div>人称分布: 我' + (resultA.personRatio ? resultA.personRatio.first : 'N/A') + ' / 你' + (resultA.personRatio ? resultA.personRatio.second : 'N/A') + '</div>' +
+        '<div>风格标签: ' + (resultA.tags.join('、') || '无') + '</div>';
+      document.getElementById('compareResultB').innerHTML =
+        '<div>总字数: ' + resultB.metadata.charCount + ' | 句子: ' + resultB.metadata.sentenceCount + '</div>' +
+        '<div>平均句长: ' + resultB.sentences.avgLength + '字</div>' +
+        '<div>口语化指数: ' + resultB.tone.colloquial.score + ' (' + resultB.tone.colloquial.level + ')</div>' +
+        '<div>情感倾向: ' + resultB.tone.sentiment.tendency + '</div>' +
+        '<div>词汇丰富度: ' + (resultB.lexicalRichness || 'N/A') + '%</div>' +
+        '<div>人称分布: 我' + (resultB.personRatio ? resultB.personRatio.first : 'N/A') + ' / 你' + (resultB.personRatio ? resultB.personRatio.second : 'N/A') + '</div>' +
+        '<div>风格标签: ' + (resultB.tags.join('、') || '无') + '</div>';
+      const diffs = [];
+      if (Math.abs(resultA.tone.colloquial.score - resultB.tone.colloquial.score) > 15) {
+        diffs.push({ label: '口语化程度', detail: (resultA.tone.colloquial.score > resultB.tone.colloquial.score ? 'A更口语化' : 'B更口语化'), diff: Math.abs(resultA.tone.colloquial.score - resultB.tone.colloquial.score) });
+      }
+      if (Math.abs(resultA.sentences.avgLength - resultB.sentences.avgLength) > 8) {
+        diffs.push({ label: '句式长度', detail: (resultA.sentences.avgLength > resultB.sentences.avgLength ? 'A句式更长' : 'B句式更长'), diff: Math.abs(resultA.sentences.avgLength - resultB.sentences.avgLength) });
+      }
+      if (resultA.tone.sentiment.tendency !== resultB.tone.sentiment.tendency) {
+        diffs.push({ label: '情感倾向', detail: 'A为' + resultA.tone.sentiment.tendency + '，B为' + resultB.tone.sentiment.tendency, diff: 100 });
+      }
+      if (resultA.lexicalRichness && resultB.lexicalRichness && Math.abs(parseFloat(resultA.lexicalRichness) - parseFloat(resultB.lexicalRichness)) > 10) {
+        diffs.push({ label: '词汇丰富度', detail: 'A:' + resultA.lexicalRichness + '% vs B:' + resultB.lexicalRichness + '%', diff: Math.abs(parseFloat(resultA.lexicalRichness) - parseFloat(resultB.lexicalRichness)) });
+      }
+      const aTags = new Set(resultA.tags), bTags = new Set(resultB.tags);
+      const onlyA = resultA.tags.filter(t => !bTags.has(t)), onlyB = resultB.tags.filter(t => !aTags.has(t));
+      if (onlyA.length > 0) diffs.push({ label: 'A独有风格标签', detail: onlyA.join('、'), diff: 50 });
+      if (onlyB.length > 0) diffs.push({ label: 'B独有风格标签', detail: onlyB.join('、'), diff: 50 });
+      if (diffs.length === 0) diffs.push({ label: '风格接近', detail: '两文本风格较为接近，无明显差异', diff: 0 });
+      diffs.sort((a, b) => b.diff - a.diff);
+      document.getElementById('compareDiff').innerHTML = diffs.map(d => {
+        const isHL = d.diff > 30;
+        return '<div class="flex items-start gap-2 ' + (isHL ? 'bg-yellow-100 -mx-2 px-2 py-1 rounded' : '') + '"><span class="' + (isHL ? 'text-red-600 font-bold' : 'text-yellow-600') + ' mt-0.5">' + (isHL ? '&#9888;' : '&#9654;') + '</span><span><strong>' + d.label + '：</strong>' + d.detail + '</span></div>';
+      }).join('');
+      document.getElementById('compareResult').classList.remove('hidden');
+      document.getElementById('resultArea').classList.add('hidden');
+      document.getElementById('compareResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ====== 作者识别 ======
+    function identifyAuthor() {
+      const authorText = document.getElementById('authorText').value.trim();
+      if (!authorText) { showToast('请输入待识别作者的文本'); return; }
+      const result = analyzeText(authorText);
+      if (!result) { showToast('文本分析失败'); return; }
+      const profiles = JSON.parse(localStorage.getItem('styleProfiles') || '[]');
+      if (profiles.length === 0) {
+        document.getElementById('authorResult').classList.remove('hidden');
+        document.getElementById('authorMatchList').innerHTML = '';
+        document.getElementById('authorNoMatch').classList.remove('hidden');
+        return;
+      }
+      const scores = profiles.map((p, i) => {
+        const pr = p.result;
+        if (!pr) return { index: i, score: 0, preview: p.preview, time: p.time, tags: p.tags || [] };
+        let score = 0;
+        // 口语化指数相似度
+        const colloquialDiff = Math.abs((pr.tone ? pr.tone.colloquial.score : 0) - result.tone.colloquial.score);
+        score += Math.max(0, 30 - colloquialDiff * 1.5);
+        // 句长相似度
+        const avgLenDiff = Math.abs((pr.sentences ? pr.sentences.avgLength : 0) - result.sentences.avgLength);
+        score += Math.max(0, 20 - avgLenDiff);
+        // 词汇丰富度相似度
+        if (pr.lexicalRichness && result.lexicalRichness) {
+          const lrDiff = Math.abs(parseFloat(pr.lexicalRichness) - parseFloat(result.lexicalRichness));
+          score += Math.max(0, 15 - lrDiff * 0.5);
+        }
+        // 情感倾向相似度
+        if (pr.tone && result.tone && pr.tone.sentiment && result.tone.sentiment) {
+          if (pr.tone.sentiment.tendency === result.tone.sentiment.tendency) score += 10;
+        }
+        // 风格标签重叠度
+        const commonTags = (pr.tags || []).filter(t => result.tags.includes(t)).length;
+        score += commonTags * 5;
+        // 人称代词分布
+        if (pr.personRatio && result.personRatio) {
+          const fpDiff = Math.abs(parseFloat(pr.personRatio.firstPct) - parseFloat(result.personRatio.firstPct));
+          score += Math.max(0, 10 - fpDiff * 0.3);
+        }
+        return { index: i, score: Math.min(100, Math.round(score)), preview: p.preview, time: p.time, tags: p.tags || [] };
+      }).sort((a, b) => b.score - a.score);
+
+      document.getElementById('authorResult').classList.remove('hidden');
+      document.getElementById('authorNoMatch').classList.add('hidden');
+      const topScore = scores[0].score;
+      const list = document.getElementById('authorMatchList');
+      list.innerHTML = scores.slice(0, 5).map((s, i) => {
+        const isTop = i === 0;
+        const badge = isTop ? '<span class="text-yellow-500">&#129351;</span>' : '';
+        const confidence = s.score >= 80 ? '高度匹配' : s.score >= 60 ? '较可能' : s.score >= 40 ? '可能' : '低匹配';
+        const confColor = s.score >= 80 ? 'bg-green-100 text-green-700' : s.score >= 60 ? 'bg-blue-100 text-blue-700' : s.score >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600';
+        return '<div class="flex items-center justify-between p-3 ' + (isTop ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50') + ' rounded-lg">' +
+          '<div class="flex items-center gap-2"><span class="text-lg">' + badge + '</span><div><div class="text-sm font-medium text-gray-700 truncate max-w-[200px]">' + (s.preview || '未命名') + '</div><div class="text-xs text-gray-400">' + s.time + '</div></div></div>' +
+          '<div class="flex items-center gap-2"><span class="text-xs px-2 py-0.5 rounded ' + confColor + '">' + confidence + '</span><span class="font-bold text-' + (isTop ? 'green' : 'gray') + '-600">' + s.score + '%</span></div></div>';
+      }).join('');
+      document.getElementById('authorResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ====== 风格迁移 ======
+    function populateMigrateTargets() {
+      const sel = document.getElementById('migrateTarget');
+      const existing = sel.innerHTML;
+      const profiles = JSON.parse(localStorage.getItem('styleProfiles') || '[]');
+      let html = '<option value="">--- 选择已有风格画像 ---</option>';
+      profiles.forEach((p, i) => {
+        const preview = (p.preview || '未命名').substring(0, 20);
+        html += '<option value="profile_' + i + '">' + preview + ' (' + p.time + ')</option>';
+      });
+      sel.innerHTML = html;
+    }
+
+    function setPresetStyle(name) {
+      const sel = document.getElementById('migrateTarget');
+      // 尝试找预设匹配选项
+      const opt = Array.from(sel.options).find(o => o.text && o.text.includes(name));
+      if (opt) { sel.value = opt.value; return; }
+      // 否则使用预设风格进行迁移建议
+      document.getElementById('migrateTarget').dataset.preset = name;
+    }
+
+    function analyzeMigration() {
+      const source = document.getElementById('migrateSource').value.trim();
+      if (!source) { showToast('请输入需要改写的文本'); return; }
+      const sourceResult = analyzeText(source);
+      if (!sourceResult) { showToast('文本分析失败'); return; }
+
+      const sel = document.getElementById('migrateTarget');
+      const preset = sel.dataset.preset;
+      let targetName = '';
+      let targetStyle = null;
+
+      if (sel.value && sel.value.startsWith('profile_')) {
+        const idx = parseInt(sel.value.replace('profile_', ''));
+        const profiles = JSON.parse(localStorage.getItem('styleProfiles') || '[]');
+        if (profiles[idx]) {
+          targetName = (profiles[idx].preview || '未命名').substring(0, 20);
+          targetStyle = profiles[idx].result;
+        }
+      }
+
+      if (!targetStyle && preset && STYLE_PRESETS[preset]) {
+        targetName = preset;
+        targetStyle = STYLE_PRESETS[preset];
+      }
+
+      if (!targetStyle) { showToast('请选择目标风格'); return; }
+
+      // 生成迁移建议
+      const suggestions = generateMigrationSuggestions(sourceResult, targetStyle, targetName);
+      document.getElementById('migrateResult').classList.remove('hidden');
+      const container = document.getElementById('migrateContent');
+
+      container.innerHTML = '<div class="p-4 bg-blue-50 rounded-lg border border-blue-200 mb-3">' +
+        '<h4 class="font-bold text-blue-700 mb-2"><i class="fa fa-exchange mr-1"></i> 从当前风格 → ' + targetName + ' 风格</h4>' +
+        '<p class="text-sm text-gray-600">以下是基于风格DNA分析的具体改写建议。</p></div>' +
+        suggestions.map((s, i) =>
+          '<div class="p-3 bg-white rounded-lg border border-gray-200">' +
+          '<div class="flex items-start gap-2"><span class="text-lg text-' + s.color + '-500 mt-0.5"><i class="fa ' + s.icon + '"></i></span>' +
+          '<div><h5 class="font-medium text-gray-800 text-sm">' + (i + 1) + '. ' + s.title + '</h5>' +
+          '<p class="text-sm text-gray-600 mt-1">' + s.detail + '</p></div></div></div>'
+        ).join('') +
+        '<div class="p-4 bg-green-50 rounded-lg border border-green-200 mt-3">' +
+        '<h4 class="font-bold text-green-700 mb-2"><i class="fa fa-pencil mr-1"></i> 改写示例</h4>' +
+        '<p class="text-sm text-gray-700" id="migrateExample">' + generateRewriteExample(source, targetName) + '</p></div>';
+
+      document.getElementById('migrateResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function generateMigrationSuggestions(sourceResult, targetStyle, targetName) {
+      const suggestions = [];
+      const srcColl = sourceResult.tone ? sourceResult.tone.colloquial.score : 50;
+      const tgtColl = targetStyle.colloquial ? targetStyle.colloquial.score : 40;
+
+      if (Math.abs(srcColl - tgtColl) > 20) {
+        if (tgtColl > srcColl) {
+          suggestions.push({ title: '提升口语化程度', detail: '当前风格偏书面化，目标风格更口语化。建议增加口语词（嘛、啦、哈、哎）、使用短句、增加设问和反问，减少长句和复杂句式。', icon: 'fa-commenting', color: 'orange' });
+        } else {
+          suggestions.push({ title: '降低口语化程度', detail: '当前风格偏口语化，目标风格更书面化。建议减少口语词使用，增加长句和复杂句式，使用更多书面连接词（然而、因此、此外），减少"我"的使用频率。', icon: 'fa-book', color: 'blue' });
+        }
+      }
+
+      const srcTags = new Set(sourceResult.tags || []);
+      const tgtTags = targetStyle.tags || [];
+      const missingTags = tgtTags.filter(t => !srcTags.has(t));
+      if (missingTags.length > 0) {
+        suggestions.push({ title: '增加目标风格标签特征', detail: '目标风格具有以下特征：' + missingTags.join('、') + '。建议在改写时融入这些元素。例如增加提问频率、使用更多感叹句、增加比喻修辞等。', icon: 'fa-tags', color: 'purple' });
+      }
+
+      const srcLR = parseFloat(sourceResult.lexicalRichness || 40);
+      const tgtLR = parseFloat(targetStyle.lexicalRichness || 45);
+      if (Math.abs(srcLR - tgtLR) > 15) {
+        if (tgtLR > srcLR) {
+          suggestions.push({ title: '提升词汇丰富度', detail: '当前词汇丰富度为' + srcLR + '%，目标风格要求更丰富的词汇。建议使用同义词替换重复词，增加专业术语和形容词汇。', icon: 'fa-font', color: 'green' });
+        } else {
+          suggestions.push({ title: '降低词汇丰富度', detail: '当前词汇丰富度为' + srcLR + '%，目标风格要求更简洁的表达。建议减少生僻词汇，使用更常见易懂的词语，避免过度修饰。', icon: 'fa-compress', color: 'gray' });
+        }
+      }
+
+      const srcAvgLen = sourceResult.sentences ? parseFloat(sourceResult.sentences.avgLength) : 20;
+      const tgtAvgLen = targetStyle.sentLengthDist ? 15 : 25;
+      const tgtShort = targetStyle.sentLengthDist ? parseFloat(targetStyle.sentLengthDist.short.pct) : 40;
+      if (tgtShort > 50 && srcAvgLen > 20) {
+        suggestions.push({ title: '缩短句式长度', detail: '目标风格偏好短句（≤10字占比' + tgtShort + '%），当前平均句长为' + srcAvgLen + '字。建议将长句拆分为多个短句，使用句号替代逗号。', icon: 'fa-scissors', color: 'red' });
+      } else if (tgtShort < 30 && srcAvgLen < 15) {
+        suggestions.push({ title: '延长句式结构', detail: '目标风格偏好长句（当前短句占比偏高），建议合并相关短句为复合句，增加修饰成分和连接词。', icon: 'fa-arrows-h', color: 'indigo' });
+      }
+
+      if (suggestions.length < 3) {
+        suggestions.push({ title: '调整标点使用习惯', detail: '注意目标风格在标点使用上的特点：调整感叹号、问号、逗号、句号的比例，使文本节奏符合目标风格。', icon: 'fa-asterisk', color: 'teal' });
+      }
+      if (suggestions.length < 4) {
+        suggestions.push({ title: '注意人称代词使用', detail: '目标风格在人称代词使用上有特定偏好。根据目标风格调整"我/你/他"的使用比例，改变叙事视角。', icon: 'fa-user', color: 'pink' });
+      }
+      return suggestions;
+    }
+
+    function generateRewriteExample(source, targetName) {
+      // 简化的改写示例
+      const sentences = source.split(/[。！？\n]/).filter(s => s.trim());
+      if (sentences.length === 0) return source;
+      const first = sentences[0].trim();
+      if (targetName === '口语化' || targetName === '情感充沛') {
+        return '原文：「' + first + '」\n→ 改为：「诶，说真的，' + first.replace(/^我/, '我呀，') + '，你说是不是？」';
+      } else if (targetName === '书面化' || targetName === '专业严谨') {
+        return '原文：「' + first + '」\n→ 改为：「关于"' + first.replace(/^我(觉得|认为|想)/, '') + '"这一观点，需要从多维度进行深入分析。首先，……」';
+      } else if (targetName === '简洁精炼') {
+        return '原文：「' + first + '」\n→ 改为：「' + first.substring(0, Math.min(20, first.length)) + '。关键在于……」';
+      }
+      return '原文：「' + first + '」\n→ 建议根据上述风格迁移建议进行改写，重点调整句长、口语化程度和情感表达方式。';
+    }
+
+    function loadSample() {
+      document.getElementById('textInput').value = SAMPLE_TEXT;
+      updateCharCount();
+      setTimeout(() => analyze(), 100);
+    }
+
+    function clearText() {
+      document.getElementById('textInput').value = '';
+      document.getElementById('resultArea').classList.add('hidden');
+      currentResult = null;
+      updateCharCount();
+    }
+
+    function updateCharCount() {
+      const val = document.getElementById('textInput').value;
+      const chars = val.replace(/\s/g, '').length;
+      const paras = val.split(/\n\s*\n/).filter(p => p.trim()).length;
+      document.getElementById('charCount').textContent = '字数：' + chars + ' | 段落：' + paras;
+    }
+
+    document.getElementById('textInput').addEventListener('input', updateCharCount);
+    document.getElementById('authorText').addEventListener('input', function() {
+      document.getElementById('authorResult').classList.add('hidden');
+    });
+
+    // localStorage 保存画像
+    function saveProfile() {
+      if (!currentResult) return;
+      const profiles = JSON.parse(localStorage.getItem('styleProfiles') || '[]');
+      const now = new Date();
+      const timeStr = now.toLocaleString('zh-CN', { hour12: false });
+      const preview = getText().substring(0, 50).replace(/\s/g, '');
+      profiles.unshift({ time: timeStr, preview: preview, tags: currentResult.tags, result: currentResult, fullText: getText() });
+      if (profiles.length > 20) profiles.length = 20;
+      localStorage.setItem('styleProfiles', JSON.stringify(profiles));
+      renderSavedList();
+      populateMigrateTargets();
+      showToast('风格画像已保存');
+    }
+
+    function renderSavedList() {
+      const container = document.getElementById('savedList');
+      const profiles = JSON.parse(localStorage.getItem('styleProfiles') || '[]');
+      document.getElementById('profileCount').textContent = '(' + profiles.length + ')';
+      if (profiles.length === 0) { container.innerHTML = '<div class="text-center text-gray-400 text-sm py-6"><i class="fa fa-inbox"></i> 暂无保存的画像</div>'; return; }
+      container.innerHTML = profiles.map((p, i) => {
+        const tagBadges = (p.tags || []).slice(0, 4).map(t => '<span class="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded">' + t + '</span>').join('');
+        return '<div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-pointer" onclick="loadProfile(' + i + ')">' +
+          '<div class="flex-1 min-w-0"><div class="text-sm font-medium text-gray-700 truncate">' + (p.preview || '未命名') + '</div>' +
+          '<div class="flex items-center gap-2 mt-1"><span class="text-xs text-gray-400"><i class="fa fa-clock-o"></i> ' + p.time + '</span>' + tagBadges + '</div></div>' +
+          '<button onclick="event.stopPropagation(); deleteProfile(' + i + ')" class="text-gray-400 hover:text-red-500 ml-2"><i class="fa fa-times"></i></button></div>';
+      }).join('');
+    }
+
+    function loadProfile(index) {
+      const profiles = JSON.parse(localStorage.getItem('styleProfiles') || '[]');
+      const p = profiles[index];
+      if (!p) return;
+      document.getElementById('textInput').value = p.fullText || '';
+      currentResult = p.result;
+      updateCharCount();
+      renderAnalysis(p.result);
+      document.getElementById('resultArea').classList.remove('hidden');
+      document.getElementById('compareResult').classList.add('hidden');
+      document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast('已加载保存的画像');
+    }
+
+    function deleteProfile(index) {
+      const profiles = JSON.parse(localStorage.getItem('styleProfiles') || '[]');
+      profiles.splice(index, 1);
+      localStorage.setItem('styleProfiles', JSON.stringify(profiles));
+      renderSavedList();
+      populateMigrateTargets();
+    }
+
+    function clearSaved() {
+      if (confirm('确定要清空所有保存的风格画像吗？')) {
+        localStorage.removeItem('styleProfiles');
+        renderSavedList();
+        populateMigrateTargets();
+        showToast('已清空所有记录');
+      }
+    }
+
+    function exportSummary() {
+      if (!currentResult) return;
+      const r = currentResult;
+      let summary = '===== 对话风格DNA分析报告 =====\n\n分析时间：' + new Date().toLocaleString('zh-CN', { hour12: false }) + '\n' +
+        '\n【基本信息】总字数 ' + r.metadata.charCount + ' | 段落 ' + r.metadata.paragraphCount + ' | 句子 ' + r.metadata.sentenceCount + '\n' +
+        '\n【句式结构】平均句长 ' + r.sentences.avgLength + ' 字\n' +
+        ' 短句 ' + r.sentences.short.count + ' | 中句 ' + r.sentences.medium.count + ' | 长句 ' + r.sentences.long.count + '\n' +
+        ' 陈述 ' + r.sentences.declarative.pct + '% | 疑问 ' + r.sentences.interrogative.pct + '% | 感叹 ' + r.sentences.exclamatory.pct + '%\n' +
+        '\n【修辞手法】比喻 ' + r.rhetoric.metaphor + ' | 排比 ' + r.rhetoric.parallelism + ' | 反问 ' + r.rhetoric.rhetorical + '\n' +
+        '\n【语气分析】口语化指数 ' + r.tone.colloquial.score + ' (' + r.tone.colloquial.level + ') | 情感倾向 ' + r.tone.sentiment.tendency + ' | 情绪强度 ' + r.tone.emotionIntensity + '\n' +
+        '\n【风格标签】' + (r.tags || []).join('、') + '\n';
+      const blob = new Blob([summary], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '风格DNA分析_' + new Date().toISOString().slice(0, 10) + '.txt';
+      a.click();
+    }
+
+    function showToast(msg) {
+      const existing = document.querySelector('.toast-notice');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = 'toast-notice fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-5 py-3 rounded-lg shadow-lg text-sm z-50 transition-all duration-300';
+      toast.style.opacity = '0'; toast.style.transform = 'translate(-50%, 20px)';
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translate(-50%, 0)'; });
+      setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translate(-50%, 20px)'; setTimeout(() => toast.remove(), 300); }, 2000);
+    }
+
+    updateCharCount();
+    renderSavedList();
+    populateMigrateTargets();
+  </script>
+</body>
+</html>
